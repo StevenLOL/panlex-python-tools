@@ -1,7 +1,81 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
-import re
+import regex
+import unicodedata
+import os
+import urllib.request
+
+data_directory = os.path.dirname(__file__) + '/data'
+
+try:
+    os.mkdir(data_directory)
+except FileExistsError: pass
+
+if os.path.exists(data_directory + '/Scripts.txt'): pass
+else:
+    url = 'ftp://ftp.unicode.org/Public/UNIDATA/Scripts.txt'
+    try:
+        with urllib.request.urlopen(url) as response, open(data_directory + '/Scripts.txt', 'wb') as out_file:
+            data = response.read()
+            out_file.write(data)
+    except: pass
+
+scripts_data = open(data_directory + '/Scripts.txt', 'r')
+scripts_dict = {}
+for line in scripts_data:
+    if line.startswith('#') or not line.strip(): continue
+    code_points = line.split(';')[0].strip().split('..')
+    start = int(code_points[0], base=16)
+    if len(code_points) > 1:
+        end = int(code_points[1], base=16)
+    else:
+        end = start
+    script = line.split(';')[1].split('#')[0].strip()
+    scripts_dict[range(start, end + 1)] = script
+
+
+def get_script(char):
+    if len(char) != 1:
+        raise TypeError('argument must be a single Unicode code point')
+    for i in scripts_dict:
+        if ord(char) in i: return scripts_dict[i]
+    return None
+
+def script_char_count(str):
+    str = unicodedata.normalize('NFC', str)
+    out_dict = {}
+    for i in str:
+        script = get_script(i)
+        if script in out_dict:
+            out_dict[script] += 1
+        else:
+            out_dict[script] = 1
+    return out_dict
+
+def get_most_common_script(string, ignore_Common_and_Inherited=True, ignore_Latin_in_ties=True, throw_exception_for_ties=True, ignore_Latin=False):
+    if len(string.strip()) == 0: return None
+    inp = script_char_count(string)
+    if ignore_Common_and_Inherited:
+        try: 
+            del inp['Common']
+        except KeyError: pass
+        try:
+            del inp['Inherited']
+        except KeyError: pass
+    if ignore_Latin:
+        try: 
+            del inp['Latin']
+        except KeyError: pass
+    output = [k for k,v in inp.items() if v == max(inp.values())]
+    if ignore_Latin_in_ties:
+        if len(output) > 1:
+            try: output.remove('Latin')
+            except ValueError: pass
+    if throw_exception_for_ties:
+        if len(output) > 1:
+            raise ValueError('tie between ' + str(output))
+    return output[0]
 
 def str_out(obj):
     try:
@@ -9,6 +83,12 @@ def str_out(obj):
     except AttributeError:
         if obj == None: return ''
         else: return obj
+
+def clean_str(str):
+    output = regex.sub(r'\s+', ' ', str.strip())
+    output = regex.sub(r'‣+', '‣', output)
+    output = output.strip('‣')
+    return output
 
 def distribute(str, delim):
     output = []
@@ -18,16 +98,16 @@ def distribute(str, delim):
             output.extend(distribute(i, delim))
         return output
 
-    regex = re.compile(r'(\S+)' + delim + r'(\S+)')
-    re_match = regex.search(str)
+    rx = regex.compile(r'(\S+)' + delim + r'(\S+)')
+    re_match = rx.search(str)
     if re_match:
-        output = [regex.sub(re_match.group(1), str, 1), regex.sub(re_match.group(2), str, 1)]
+        output = [rx.sub(re_match.group(1), str, 1), rx.sub(re_match.group(2), str, 1)]
     else:
         return [str]
     
     return output
 
-def expand_parens(str, include_spaces = False):
+def expand_parens(str, include_spaces=False):
     output = []
 
     if '‣' in str:
@@ -36,11 +116,11 @@ def expand_parens(str, include_spaces = False):
         return output
 
     if include_spaces:
-        regex1 = re.compile(r'(^.*)\((.+)\)(.*$)')
-        regex2 = re.compile(r'(^.*)\((.+)\)(.*$)')
+        regex1 = regex.compile(r'(^.*)\((.+)\)(.*$)')
+        regex2 = regex.compile(r'(^.*)\((.+)\)(.*$)')
     else:
-        regex1 = re.compile(r'(^.*[^ ])\(([^ ]+)\)(.*$)')
-        regex2 = re.compile(r'(^.*)\(([^ ]+)\)([^ ].*$)')
+        regex1 = regex.compile(r'(^.*[^ ])\(([^ ]+)\)(.*$)')
+        regex2 = regex.compile(r'(^.*)\(([^ ]+)\)([^ ].*$)')
 
     re_match1 = regex1.search(str)
     re_match2 = regex2.search(str)
@@ -52,16 +132,16 @@ def expand_parens(str, include_spaces = False):
         without = re_match2.group(1) + re_match2.group(3)
     else:
         return [str]
- 
-    output = [within, without]
+
+    output = [clean_str(without), clean_str(within)]
 
     return output
 
 def move_parens_front(str):
 
-    regex = re.compile(r'(^.+)\((.+)\)(.*$)')
+    rx = regex.compile(r'(^.*)\((.+)\)(.*$)')
 
-    re_match = regex.search(str)
+    re_match = rx.search(str)
     if re_match:
         beginning = re_match.group(1).strip() 
         middle = re_match.group(2).strip()
@@ -77,11 +157,19 @@ def handle_initialism(str):
             output.extend(handle_initialism(i))
         return output
 
-    regex = re.compile(r'(^.+)\(([^a-z]{2,})\)')
+    regex1 = regex.compile(r'(^.+)\(([^a-z]{2,})\)(.*)$')
+    regex2 = regex.compile(r'(^[^a-z]{2,} +)\((.+?)\)(.*)$')
 
-    re_match = regex.search(str)
-    if re_match:
-        return[re_match.group(1).strip(), re_match.group(2).strip()]
+    re_match1 = regex1.search(str)
+    re_match2 = regex2.search(str)
+    if re_match1:
+        str1 = ' '.join([re_match1.group(1).strip(), re_match1.group(3).strip()]).strip()
+        str2 = ' '.join([re_match1.group(2).strip(), re_match1.group(3).strip()]).strip()
+        return[str1, str2]
+    elif re_match2:
+        str1 = ' '.join([re_match2.group(1).strip(), re_match2.group(3).strip()]).strip()
+        str2 = ' '.join([re_match2.group(2).strip(), re_match2.group(3).strip()]).strip()
+        return[str1, str2]
     else:
         return [str]
 
@@ -93,3 +181,41 @@ def flatten(x):
         else:
             result.append(el)
     return result
+
+def multiple_replace(text, adict):
+    rx = regex.compile('|'.join(map(regex.escape, adict)))
+    def one_xlat(match):
+        return adict[match.group(0)]
+    return rx.sub(one_xlat, text)
+
+def tabbed_output(columns, output_file, match_re=None, match_column=None):
+    if match_re: rx = regex.compile(match_re)
+    if len(set([len(column) for column in columns])) == 1:
+        for i in range(len(columns[0])):
+            for column in columns:
+                if isinstance(column[i], str):
+                    column[i] = [column[i]]
+                column[i] = '‣'.join(column[i])
+            line = '\t'.join([clean_str(column[i]) for column in columns])
+            if match_re:
+                if match_column:
+                    if rx.search(match_column[i]):
+                        print(line, file=output_file)
+                else:            
+                    if rx.search(line):
+                        print(line, file=output_file)
+            else:
+                print(line, file=output_file)
+    else: raise IndexError("first argument of 'tabbed_output()' must be a list of identical-length lists")
+    
+
+def unicode_names(str):
+    output = []
+    for char in str:
+        try:
+            output.append(unicodedata.name(char))
+        except ValueError: 
+            output.append(None)
+    return output
+    
+
