@@ -3,50 +3,13 @@
 
 import regex
 import unicodedata
-import os
-import urllib.request
-
-data_directory = os.path.dirname(__file__) + '/data'
-
-try:
-    os.mkdir(data_directory)
-except FileExistsError: pass
-
-if os.path.exists(data_directory + '/Scripts.txt'): pass
-else:
-    url = 'ftp://ftp.unicode.org/Public/UNIDATA/Scripts.txt'
-    try:
-        with urllib.request.urlopen(url) as response, open(data_directory + '/Scripts.txt', 'wb') as out_file:
-            data = response.read()
-            out_file.write(data)
-    except: pass
-
-scripts_data = open(data_directory + '/Scripts.txt', 'r')
-scripts_dict = {}
-for line in scripts_data:
-    if line.startswith('#') or not line.strip(): continue
-    code_points = line.split(';')[0].strip().split('..')
-    start = int(code_points[0], base=16)
-    if len(code_points) > 1:
-        end = int(code_points[1], base=16)
-    else:
-        end = start
-    script = line.split(';')[1].split('#')[0].strip()
-    scripts_dict[range(start, end + 1)] = script
-
-
-def get_script(char):
-    if len(char) != 1:
-        raise TypeError('argument must be a single Unicode code point')
-    for i in scripts_dict:
-        if ord(char) in i: return scripts_dict[i]
-    return None
+import unicode
 
 def script_char_count(str):
     str = unicodedata.normalize('NFC', str)
     out_dict = {}
     for i in str:
-        script = get_script(i)
+        script = unicode.get_property(i, 'Script')
         if script in out_dict:
             out_dict[script] += 1
         else:
