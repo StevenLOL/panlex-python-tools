@@ -172,6 +172,24 @@ def tabbed_output(columns, output_file, match_re=None, match_column=None):
     else: raise IndexError("first argument of 'tabbed_output()' must be a list of identical-length lists")
     
 
+def assign_property(expression_list, string_to_find, property_list, property_value, remove=True):
+    rx = regex.compile(string_to_find)
+    prp = None
+    for i in range(len(expression_list)):
+        if rx.search(expression_list[i]):
+            prp = property_value
+            if remove: 
+                expression_list[i] = rx.sub('', expression_list[i])
+            else: pass
+    if prp: property_list.append(prp)
+
+def new_meaning(entries, columns):
+    if len(entries) == len(columns):
+        for i in range(len(entries)):
+            entries[i] = [clean_str(expr) for expr in entries[i]]
+            columns[i].append(entries[i])
+    else: raise IndexError("entries and columns must be identical-length lists")
+
 def unicode_names(str):
     output = []
     for char in str:
