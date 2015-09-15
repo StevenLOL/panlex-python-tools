@@ -112,6 +112,7 @@ file_list = [
     ('EastAsianWidth.txt', {'property_name': 'East_Asian_Width'}),
     ('Unihan_RadicalStrokeCounts.txt', {'Unihan': True}),
     ('IndicPositionalCategory.txt', {}),
+    ('Unihan_DictionaryLikeData.txt', {'Unihan' : True}), 
     ]
     
 for i in file_list:
